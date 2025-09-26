@@ -57,11 +57,12 @@ Request body:
 {
   "plaintext": "<data>",
   "plaintext_encoding": "base64", // or "utf-8"
+  "json": { "hello": "world" }, // optional structured payload
   "sign": true
 }
 ```
 
-`plaintext` is interpreted as Base64 unless `plaintext_encoding` is `"utf-8"`. When `sign` is true, the service must be configured with a signing private key.
+Provide either `plaintext` (interpreted as Base64 unless `plaintext_encoding` is `"utf-8"`) **or** a structured JSON value via the `json` field. When `sign` is true, the service must be configured with a signing private key.
 
 Response:
 
