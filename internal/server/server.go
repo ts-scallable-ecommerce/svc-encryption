@@ -1,10 +1,12 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -83,9 +85,10 @@ func (s *Server) handleHealth(c *fiber.Ctx) error {
 }
 
 type encryptRequest struct {
-	Plaintext         string `json:"plaintext"`
-	PlaintextEncoding string `json:"plaintext_encoding,omitempty"`
-	Sign              bool   `json:"sign,omitempty"`
+	Plaintext         string          `json:"plaintext"`
+	PlaintextEncoding string          `json:"plaintext_encoding,omitempty"`
+	JSON              json.RawMessage `json:"json,omitempty"`
+	Sign              bool            `json:"sign,omitempty"`
 }
 
 type encryptResponse struct {
@@ -97,11 +100,7 @@ func (s *Server) handleEncrypt(c *fiber.Ctx) error {
 	if err := c.BodyParser(&req); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("invalid request: %v", err))
 	}
-	if req.Plaintext == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "plaintext is required")
-	}
-
-	data, err := decodePayload(req.Plaintext, req.PlaintextEncoding)
+	data, err := resolveEncryptPayload(&req)
 	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
@@ -168,4 +167,30 @@ func decodePayload(value, encoding string) ([]byte, error) {
 		return []byte(value), nil
 	}
 	return nil, fmt.Errorf("unsupported plaintext_encoding: %s", encoding)
+}
+
+func resolveEncryptPayload(req *encryptRequest) ([]byte, error) {
+	hasPlaintext := req.Plaintext != ""
+	hasJSON := len(req.JSON) != 0
+
+	if hasPlaintext && hasJSON {
+		return nil, errors.New("provide only one of plaintext or json")
+	}
+
+	if hasJSON {
+		payload := bytes.TrimSpace(req.JSON)
+		if len(payload) == 0 {
+			return nil, errors.New("json payload cannot be empty")
+		}
+		if !json.Valid(payload) {
+			return nil, errors.New("json payload must be valid JSON")
+		}
+		return payload, nil
+	}
+
+	if hasPlaintext {
+		return decodePayload(req.Plaintext, req.PlaintextEncoding)
+	}
+
+	return nil, errors.New("plaintext or json payload is required")
 }
